@@ -10,7 +10,7 @@ from functools import wraps
 from cryptography.fernet import Fernet
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
-
+ 
 
 load_dotenv()
 
@@ -27,7 +27,7 @@ users_collection = db["users"]
 MONGOURI = os.getenv("MONGOURI")
 JWT_SECRET = os.getenv("JWT_SECRET", "change_this_secret_in_production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_EXP_MINUTES = int(os.getenv("JWT_EXP_MINUTES", "60"))
+JWT_EXP_MINUTES = int(os.getenv("JWT_EXP_MINUTES", "1440"))
 FERNET_KEY = os.getenv("FERNET_KEY")  
 
 # Setup Fernet if key provided
@@ -85,14 +85,14 @@ def token_required(f):
         token = request.headers.get("Authorization")
 
         if not token:
-            return jsonify({"error": "Token missing"}), 401
+            return jsonify({"error": "Token missing", "status": 401}), 401
 
         try:
             token = token.replace("Bearer ", "")
             data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             request.user_id = data["user_id"]
         except Exception as e:
-            return jsonify({"error": "Invalid or expired token"}), 401
+            return jsonify({"error": "Invalid or expired token", "status": 401}), 401
 
         return f(*args, **kwargs)
 
@@ -107,11 +107,11 @@ def register():
 
     required = ["userName", "contactNumber", "email", "age", "gender", "password"]
     if not all(field in data for field in required):
-        return jsonify({"error": "Missing fields"}), 400
+        return jsonify({"error": "Missing fields", "status": 400}), 400
 
     # Check if email already exists
     if users_collection.find_one({"email": data["email"]}):
-        return jsonify({"error": "Email already registered"}), 409
+        return jsonify({"error": "Email already registered", "status": 409}), 409
 
     hashed_password = hash_password(data["password"])
 
@@ -128,6 +128,7 @@ def register():
 
     return jsonify({
         "message": "User registered successfully",
+        "status": 201,
         "user_id": str(result.inserted_id)
     }), 201
 
@@ -141,10 +142,10 @@ def login():
     user = users_collection.find_one({"email": email})
 
     if not user:
-        return jsonify({"error": "Invalid email or password"}), 401
+        return jsonify({"error": "Invalid email or password", "status": 401}), 401
 
     if not verify_password(password, user["password"]):
-        return jsonify({"error": "Invalid email or password"}), 401
+        return jsonify({"error": "Invalid email or password", "status": 401}), 401
 
     token = jwt.encode(
         {"user_id": str(user["_id"])},
@@ -154,6 +155,7 @@ def login():
 
     return jsonify({
         "message": "Login successful",
+        "status": 200,
         "token": token
     }), 200
 
@@ -164,7 +166,7 @@ def profile():
     user = users_collection.find_one({"_id": ObjectId(request.user_id)})
     
     if not user:
-        return jsonify({"error": "User not found"}), 404
+        return jsonify({"error": "User not found", "status": 404}), 404
 
     user["_id"] = str(user["_id"])
     user.pop("password")
@@ -174,7 +176,7 @@ def profile():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"message": "ok", "status": 200})
 
 
 if __name__ == "__main__":
